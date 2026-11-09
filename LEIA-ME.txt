@@ -1,0 +1,21 @@
+CAPIVARA DE ESTIMACAO (versao animada)
+
+1) Extraia esta pasta (clique direito no .zip > Extrair tudo).
+2) De dois cliques em "Iniciar Capivara.bat".
+   Na primeira vez ele instala tudo sozinho (precisa de internet).
+   Depois disso abre direto.
+
+O que ela faz:
+  - Anda atras do mouse com aceleracao suave, inclina ao frear e quica nos passos.
+  - Pisca, mexe a orelha, fareja, olha para o cursor e da golinhos no bubble tea.
+  - Clique nela: pula de alegria (amassa antes, estica no ar, amassa ao cair).
+  - Segurar e arrastar: vira um pendulo no seu colo.
+  - Clicar em qualquer lugar da tela: ela se assusta.
+  - Mouse parado por 15 s: ela dorme.
+  - Clique direito: trocar capivara, tamanho, balao de fala, iniciar com o Windows, sair.
+
+Quer outra capivara? Coloque um PNG com fundo transparente (virado para a DIREITA)
+na pasta "imagens". Para ter piscar, orelha, patinhas etc., crie um arquivo .json com o
+mesmo nome (use capivara_flores.json como modelo; as posicoes vao de 0 a 1).
+
+Obs.: as imagens das capivaras sao arte de terceiros. Use apenas para uso pessoal.
