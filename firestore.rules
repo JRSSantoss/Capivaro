@@ -1,0 +1,141 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // AVISO: autenticação anônima NÃO restringe acesso a funcionários.
+    // Quem tiver o endereço poderá usar este protótipo.
+    function anonimo() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function treinamentoValido(d) {
+      return d.get('trainingRecent', '') in [
+        '', 'Menos de 1 semana', 'Menos de 3 semanas',
+        'Menos de 1 mês', 'Menos de 6 meses'
+      ];
+    }
+
+    function resultadoValido(d) {
+      return d.status in ['pendente','resolvido','nao_resolvido']
+        && d.reason in [
+          '', 'Manutenção eletrônica', 'Manutenção mecânica',
+          'Falta de itens', 'Itens incorretos', 'Cartucho Vencido',
+          'Cartucho Avariado', 'Procedimentos incorretos',
+          'Sem continuidade do atendimento'
+        ]
+        && (d.status == 'nao_resolvido' || d.reason == '');
+    }
+
+    // Campos novos: opcionais em registros antigos (compatibilidade V5).
+    // Na interface V6 as opções ficam obrigatórias quando habilitadas.
+    function detalhesExtrasValidos(d) {
+      return d.get('resolutionType', '') in [
+          '', 'Troca em garantia', 'Ajustes remotos'
+        ]
+        && (d.status == 'resolvido' || d.get('resolutionType', '') == '')
+        && d.get('commercialInterference', false) is bool
+        && d.get('commercialSeller', '') is string
+        && d.get('commercialSeller', '').size() <= 120
+        && (
+          (d.get('commercialInterference', false) == false
+            && d.get('commercialSeller', '') == '')
+          || (d.get('commercialInterference', false) == true
+            && d.get('commercialSeller', '').size() > 0)
+        )
+        && d.get('transferred', false) is bool
+        && d.get('transferSector', '') in [
+          '', 'Venda de cartuchos', 'SDR', 'Pós vendas', 'SMI', 'Financeiro'
+        ]
+        && (
+          (d.get('transferred', false) == false
+            && d.get('transferSector', '') == '')
+          || (d.get('transferred', false) == true
+            && d.get('transferSector', '') != '')
+        );
+    }
+
+    function dadosAtendimento(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+          'id','createdAt','client','company','phone','technician',
+          'equipment','status','reason','checked','notes',
+          'trainingRecent','archived',
+          'resolutionType','commercialInterference','commercialSeller',
+          'transferred','transferSector'
+        ])
+        && d.keys().hasAll([
+          'id','createdAt','client','company','phone','technician',
+          'equipment','status','reason','checked','notes'
+        ])
+        && d.id is string && d.id == id && d.id.size() > 0 && d.id.size() <= 100
+        && d.createdAt is string && d.createdAt.size() <= 64
+        && d.client is string && d.client.size() > 0 && d.client.size() <= 160
+        && d.company is string && d.company.size() > 0 && d.company.size() <= 160
+        && d.phone is string && d.phone.size() > 0 && d.phone.size() <= 40
+        && d.technician in ['João','Ricardo','']
+        && d.equipment is string && d.equipment.size() <= 160
+        && resultadoValido(d)
+        && d.checked is bool
+        && d.notes is string && d.notes.size() <= 10000
+        && treinamentoValido(d)
+        && detalhesExtrasValidos(d)
+        && d.get('archived', false) is bool;
+    }
+
+    match /atendimentos/{atendimentoId} {
+      allow get, list: if anonimo();
+      allow create: if anonimo() && dadosAtendimento(atendimentoId);
+      allow update: if anonimo() && dadosAtendimento(atendimentoId)
+        // identidade do primeiro contato preservada
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt;
+      // Exclusão definitiva desativada; interface permite arquivar/restaurar.
+      allow delete: if false;
+    }
+
+    function casoExistente(id) {
+      return exists(/databases/$(database)/documents/atendimentos/$(id))
+        && get(/databases/$(database)/documents/atendimentos/$(id)).data.get('archived', false) == false;
+    }
+
+    function dadosRetorno(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+          'id','atendimentoId','createdAt','technician',
+          'equipment','status','reason','checked','notes','trainingRecent',
+          'resolutionType','commercialInterference','commercialSeller',
+          'transferred','transferSector'
+        ])
+        && d.keys().hasAll([
+          'id','atendimentoId','createdAt','technician',
+          'equipment','status','reason','checked','notes','trainingRecent'
+        ])
+        && d.id is string && d.id == id && d.id.size() > 0 && d.id.size() <= 100
+        && d.atendimentoId is string && d.atendimentoId.matches('[A-Za-z0-9_-]{1,100}')
+        && d.createdAt is string && d.createdAt.size() <= 64
+        && d.technician in ['João','Ricardo']
+        && d.equipment is string && d.equipment.size() <= 160
+        && resultadoValido(d)
+        && d.checked is bool
+        && d.notes is string && d.notes.size() <= 10000
+        && treinamentoValido(d)
+        && detalhesExtrasValidos(d);
+    }
+
+    // Um documento por retorno. A coleção é distinta dos atendimentos iniciais.
+    match /retornos/{retornoId} {
+      allow get, list: if anonimo();
+      allow create: if anonimo() && dadosRetorno(retornoId)
+        && casoExistente(request.resource.data.atendimentoId);
+      allow update: if anonimo() && dadosRetorno(retornoId)
+        && casoExistente(resource.data.atendimentoId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'technician','equipment','status','reason','checked','notes','trainingRecent',
+          'resolutionType','commercialInterference','commercialSeller',
+          'transferred','transferSector'
+        ]);
+      // Preservar a linha do tempo: retornos não são excluídos individualmente.
+      allow delete: if false;
+    }
+  }
+}
